@@ -998,6 +998,18 @@ pub(crate) unsafe fn setsockopt<T>(
     .map(|_| ())
 }
 
+#[allow(unused)]
+pub(crate) unsafe fn setsockopt_len<T>(
+    fd: Socket,
+    opt: c_int,
+    val: c_int,
+    payload: T,
+    len: libc::socklen_t,
+) -> io::Result<()> {
+    let payload = ptr::addr_of!(payload).cast();
+    syscall!(setsockopt(fd, opt, val, payload, len)).map(|_| ())
+}
+
 pub(crate) const fn to_in_addr(addr: &Ipv4Addr) -> in_addr {
     // `s_addr` is stored as BE on all machines, and the array is in BE order.
     // So the native endian conversion method is used so that it's never
@@ -2151,6 +2163,44 @@ impl crate::Socket {
                 IPPROTO_IPV6,
                 libc::IPV6_TCLASS,
                 tclass as c_int,
+            )
+        }
+    }
+
+    /// Get the value of the `TCP_CONGESTION` option for this socket.
+    ///
+    /// For more information about this option, see [`set_tcp_congestion`].
+    ///
+    /// [`set_tcp_congestion`]: Socket::set_tcp_congestion
+    #[cfg(all(feature = "all", any(target_os = "linux")))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "all", any(target_os = "linux")))))]
+    pub fn tcp_congestion(&self) -> io::Result<String> {
+        // unsafe { getsockopt::<String>(self.as_raw(), IPPROTO_TCP, libc::TCP_CONGESTION) }
+        unsafe {
+            getsockopt::<[u8; 16]>(self.as_raw(), IPPROTO_TCP, libc::TCP_CONGESTION).map(|buf| {
+                String::from_utf8_lossy(&buf)
+                    .trim_matches(char::from(0))
+                    .to_string()
+            })
+        }
+    }
+
+    /// Set the value of the `TCP_CONGESTION` option for this socket.
+    ///
+    /// Specifies the congestion control algorithm to use for this socket.
+    ///
+    /// The value must be a valid congestion control algorithm name of the
+    /// platform. For example, Linux may supports "reno", "cubic".
+    #[cfg(all(feature = "all", any(target_os = "linux")))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "all", any(target_os = "linux")))))]
+    pub fn set_tcp_congestion(&self, name: &str) -> io::Result<()> {
+        unsafe {
+            setsockopt_len(
+                self.as_raw(),
+                IPPROTO_TCP,
+                libc::TCP_CONGESTION,
+                name,
+                name.len() as libc::socklen_t,
             )
         }
     }

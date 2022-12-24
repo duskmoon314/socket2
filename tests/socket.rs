@@ -1341,3 +1341,6 @@ fn original_dst_ipv6() {
         Err(err) => assert_eq!(err.raw_os_error(), Some(libc::EOPNOTSUPP)),
     }
 }
+
+#[cfg(all(feature = "all", any(target_os = "linux")))]
+test!(IPV4, tcp_congestion, set_tcp_congestion("reno"));
